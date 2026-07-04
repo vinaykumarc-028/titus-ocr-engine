@@ -1,0 +1,67 @@
+# Dependencies
+node_modules/
+jspm_packages/
+web_modules/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+
+# React / Vite / Node build outputs
+dist/
+build/
+out/
+.next/
+.docusaurus/
+.svelte-kit/
+.nuxt/
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+
+# IDE / OS specific files
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db
+
+# Temporary files & logs
+.tmp/
+temp/
+tmp/
+*.tmp
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Project specific temporary testing files
+test_14_pages.html
+test_digital.pdf

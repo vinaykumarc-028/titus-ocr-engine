@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Project TITUS-082 Prototype</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: #f5f6f8;
+        color: #17202a;
+        font-family: Arial, sans-serif;
+      }
+
+      main {
+        width: min(920px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 40px 0;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 30px;
+        letter-spacing: 0;
+      }
+
+      p {
+        margin: 0;
+        color: #526171;
+      }
+
+      #dropzone {
+        display: grid;
+        min-height: 220px;
+        place-items: center;
+        margin-top: 24px;
+        padding: 32px;
+        border: 2px dashed #8c98a8;
+        border-radius: 8px;
+        background: #ffffff;
+        text-align: center;
+      }
+
+      #dropzone.active {
+        border-color: #126b58;
+        background: #edf8f4;
+      }
+
+      button {
+        margin-top: 16px;
+        border: 0;
+        border-radius: 6px;
+        background: #126b58;
+        color: #ffffff;
+        cursor: pointer;
+        font: inherit;
+        font-weight: 700;
+        padding: 10px 16px;
+      }
+
+      button:disabled {
+        cursor: wait;
+        opacity: 0.65;
+      }
+
+      input {
+        display: none;
+      }
+
+      #status {
+        min-height: 24px;
+        margin: 18px 0;
+        font-weight: 700;
+      }
+
+      .error {
+        color: #a32620;
+      }
+
+      #results {
+        display: grid;
+        gap: 12px;
+      }
+
+      .result {
+        border: 1px solid #d8dee6;
+        border-radius: 8px;
+        background: #ffffff;
+        padding: 16px;
+      }
+
+      .meta {
+        margin-bottom: 8px;
+        color: #526171;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .content {
+        margin: 0;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font-family: Consolas, "Liberation Mono", monospace;
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Project TITUS-082</h1>
+      <p>Upload PDFs up to 50MB or images up to 10MB for verbatim extraction.</p>
+
+      <section id="dropzone">
+        <div>
+          <strong>Drop files here</strong>
+          <p>Accepted: PDF, JPG, JPEG, PNG, WEBP, TIFF.</p>
+          <button id="selectButton" type="button">Select files</button>
+          <input
+            id="fileInput"
+            type="file"
+            multiple
+            accept="application/pdf,image/jpeg,image/png,image/webp,image/tiff"
+          />
+        </div>
+      </section>
+
+      <div id="status" aria-live="polite"></div>
+      <section id="results"></section>
+    </main>
+
+    <script>
+      const IMAGE_LIMIT = 10 * 1024 * 1024;
+      const PDF_LIMIT = 50 * 1024 * 1024;
+      const ACCEPTED_IMAGES = new Set([
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/tiff",
+      ]);
+
+      const dropzone = document.querySelector("#dropzone");
+      const fileInput = document.querySelector("#fileInput");
+      const selectButton = document.querySelector("#selectButton");
+      const statusEl = document.querySelector("#status");
+      const resultsEl = document.querySelector("#results");
+
+      function setStatus(message, isError = false) {
+        statusEl.textContent = message;
+        statusEl.classList.toggle("error", isError);
+      }
+
+      function validateFiles(files) {
+        const validFiles = [];
+
+        for (const file of files) {
+          if (file.type === "application/pdf") {
+            if (file.size > PDF_LIMIT) {
+              throw new Error(`${file.name} exceeds the 50MB PDF limit.`);
+            }
+            validFiles.push(file);
+            continue;
+          }
+
+          if (ACCEPTED_IMAGES.has(file.type)) {
+            if (file.size > IMAGE_LIMIT) {
+              throw new Error(`${file.name} exceeds the 10MB image limit.`);
+            }
+            validFiles.push(file);
+            continue;
+          }
+
+          throw new Error(`${file.name} is not a supported PDF or image type.`);
+        }
+
+        if (validFiles.length === 0) {
+          throw new Error("Select at least one PDF or image file.");
+        }
+
+        return validFiles;
+      }
+
+      function renderResults(elements) {
+        resultsEl.replaceChildren();
+
+        for (const element of elements) {
+          const article = document.createElement("article");
+          article.className = "result";
+
+          const meta = document.createElement("div");
+          meta.className = "meta";
+          meta.textContent = `${element.type} | ${Math.round(element.confidence)}% confidence`;
+
+          const content = document.createElement("pre");
+          content.className = "content";
+
+          const span = document.createElement("span");
+          span.textContent = element.content;
+          if (Number(element.confidence) < 75) {
+            span.setAttribute("style", "background: yellow;");
+          }
+
+          content.append(span);
+          article.append(meta, content);
+          resultsEl.append(article);
+        }
+      }
+
+      async function uploadFiles(fileList) {
+        try {
+          const files = validateFiles(fileList);
+          const formData = new FormData();
+          for (const file of files) {
+            formData.append("files", file);
+          }
+
+          selectButton.disabled = true;
+          resultsEl.replaceChildren();
+          setStatus("Processing...");
+
+          const response = await fetch("/api/process", {
+            method: "POST",
+            body: formData,
+          });
+          const payload = await response.json();
+
+          if (!response.ok) {
+            throw new Error(payload.error || "Upload failed.");
+          }
+
+          renderResults(payload.elements || []);
+          setStatus(`Processed ${(payload.elements || []).length} returned items.`);
+        } catch (error) {
+          setStatus(error.message || "Upload failed.", true);
+        } finally {
+          selectButton.disabled = false;
+          fileInput.value = "";
+        }
+      }
+
+      selectButton.addEventListener("click", () => fileInput.click());
+      fileInput.addEventListener("change", () => uploadFiles(fileInput.files));
+
+      for (const eventName of ["dragenter", "dragover"]) {
+        dropzone.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          dropzone.classList.add("active");
+        });
+      }
+
+      for (const eventName of ["dragleave", "drop"]) {
+        dropzone.addEventListener(eventName, (event) => {
+          event.preventDefault();
+          dropzone.classList.remove("active");
+        });
+      }
+
+      dropzone.addEventListener("drop", (event) => {
+        event.preventDefault();
+        uploadFiles(event.dataTransfer.files);
+      });
+    </script>
+  </body>
+</html>
